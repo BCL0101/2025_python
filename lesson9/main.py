@@ -1,10 +1,16 @@
-from flask import Flask,render_template_string, request, jsonify
+from flask import Flask,render_template_string, request, jsonify,abort
 from google import genai
 from dotenv import load_dotenv
 import os
+from linebot import LineBotApi, WebhookHandler
+from linebot.exceptions import InvalidSignatureError
+from linebot.models import *
 load_dotenv()
+
 app = Flask(__name__)
 client = genai.Client(api_key=os.getenv("GENAI_API_KEY"))
+line_bot_api = LineBotApi(os.getenv("CHANNEL_ACCESS_TOKEN"))
+handler = WebhookHandler(os.getenv("CHANNEL_SECRET"))
 
 @app.route("/")
 def index():
@@ -13,7 +19,7 @@ def index():
     <html lang="zh-TW">
     <head>
         <meta charset="UTF-8">
-        <title>Gemini AI Chatbot</title>
+        <title>Gemini 小助手 Chatbot</title>
         <style>
             body { font-family: Arial, sans-serif; background: #f5f5f5; }
             .container { max-width: 900px; margin: 40px auto; background: #fff; padding: 40px; border-radius: 10px; box-shadow: 0 2px 8px #ccc; }
@@ -27,7 +33,7 @@ def index():
     </head>
     <body>
         <div class="container">
-            <h1>Gemini AI Chatbot</h1>
+            <h1>Gemini 小助手 Chatbot</h1>
             <input type="text" id="question" placeholder="請輸入您的問題..." />
             <div>
                 <button class="btn btn-start" onclick="startChat()">開始</button>
@@ -71,9 +77,29 @@ def chat():
         return jsonify({'error': '未輸入問題'}), 400
     try:
         response = client.models.generate_content(
-            model="gemini-2.5-flash", contents=f"{question},回應請輸出成為html格式,請記得您的名字是`AI Musk`"
+            model="gemini-2.5-flash", contents=f"{question},回應請輸出成為html格式,請記得您的名字是`致理小助手`"
         )
         html_format = response.text.replace("```html","").replace("```","")
         return jsonify({'html': html_format})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route("/callback", methods=['POST'])
+def callback():
+    signature = request.headers['X-Line-Signature']
+    body = request.get_data(as_text=True)
+    app.logger.info("Request body: " + body)
+    try:
+        handler.handle(body, signature)
+    except InvalidSignatureError:
+        abort(400)
+    return 'OK'
+
+@handler.add(MessageEvent, message=TextMessage)
+def handle_message(event):
+    
+    response = client.models.generate_content(
+    model="gemini-2.5-flash", contents=event.message.text
+    )
+    message = TextSendMessage(text=response.text)
+    line_bot_api.reply_message(event.reply_token, message)
