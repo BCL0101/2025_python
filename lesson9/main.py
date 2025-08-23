@@ -1,6 +1,10 @@
-from flask import Flask,render_template_string
-
+from flask import Flask,render_template_string, request, jsonify
+from google import genai
+from dotenv import load_dotenv
+import os
+load_dotenv()
 app = Flask(__name__)
+client = genai.Client(api_key=os.getenv("GENAI_API_KEY"))
 
 @app.route("/")
 def index():
@@ -9,7 +13,7 @@ def index():
     <html lang="zh-TW">
     <head>
         <meta charset="UTF-8">
-        <title>Gemini 小助手 Chatbot</title>
+        <title>Gemini AI Chatbot</title>
         <style>
             body { font-family: Arial, sans-serif; background: #f5f5f5; }
             .container { max-width: 900px; margin: 40px auto; background: #fff; padding: 40px; border-radius: 10px; box-shadow: 0 2px 8px #ccc; }
@@ -23,7 +27,7 @@ def index():
     </head>
     <body>
         <div class="container">
-            <h1>Gemini 小助手 Chatbot</h1>
+            <h1>Gemini AI Chatbot</h1>
             <input type="text" id="question" placeholder="請輸入您的問題..." />
             <div>
                 <button class="btn btn-start" onclick="startChat()">開始</button>
@@ -58,3 +62,18 @@ def index():
     </html>
     '''
     return render_template_string(html)
+
+@app.route("/chat", methods=["POST"])
+def chat():
+    data = request.get_json()
+    question = data.get('question', '').strip()
+    if not question:
+        return jsonify({'error': '未輸入問題'}), 400
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.5-flash", contents=f"{question},回應請輸出成為html格式,請記得您的名字是`AI Musk`"
+        )
+        html_format = response.text.replace("```html","").replace("```","")
+        return jsonify({'html': html_format})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
